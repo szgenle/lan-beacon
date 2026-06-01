@@ -12,29 +12,51 @@ lan-beacon 用于局域网内设备在场感知。分为两个角色：
 | 角色 | 职责 | 典型平台 |
 |------|------|----------|
 | **Beacon（广播端）** | 注册 mDNS 服务 + 运行 HTTP 心跳端点 | Android（手机） |
-| **Scanner（发现端）** | 浏览 mDNS 服务 + 轮询 HTTP 端点 | Godot 桌面（PC） |
+| **Scanner（发现端）** | 发现 Beacon（子网扫描或 mDNS）+ 轮询 HTTP 端点 | Godot 桌面（PC） |
 
-通信链路：
+发现阶段支持两种策略，Scanner 实现至少选其一：
+
+| 策略 | 原理 | 当前采用 |
+|------|------|----------|
+| **子网扫描（Subnet Scan）** | 遍历本机 /24 子网所有 IP，逐个探测 HTTP 端点 | Godot 端 |
+| **mDNS 浏览** | 向组播地址发送 PTR 查询，被动接收响应 | （保留，未来可选） |
+
+通信链路（子网扫描模式）：
 
 ```
 Scanner                           Beacon
   │                                  │
-  │──── mDNS PTR Query ────────────►│  (发现阶段)
-  │◄─── mDNS PTR/SRV/A Response ───│
+  │── HTTP GET /v1/healthz ───────►│  (子网遍历探测，并发)
+  │◄── 200 JSON ──────────────────│  → 发现设备
   │                                  │
-  │──── HTTP GET /v1/healthz ──────►│  (心跳阶段)
-  │◄─── 200 JSON ──────────────────│
+  │── HTTP GET /v1/healthz ───────►│  (心跳阶段，定时轮询)
+  │◄── 200 JSON ──────────────────│
   │                                  │
   │   (连续 N 次超时 → 判定离场)     │
 ```
 
 ---
 
-## 2. mDNS 服务发现
+## 2. 设备发现
 
-### 2.1 服务注册（Beacon 端）
+### 2.1 子网扫描（Subnet Scan）——当前 Godot 端采用
 
-Beacon 启动时向局域网注册一条 mDNS 服务记录：
+Scanner 遍历本机所有 RFC 1918 私有 IPv4 地址所属的 /24 子网，对每个 IP 主动发起 HTTP 探测：
+
+**流程：**
+
+1. 枚举本机网络接口，筛选 IPv4 私有地址（10.x / 172.16-31.x / 192.168.x）
+2. 对每个地址取 /24 前缀，生成 1–254 的候选 IP 列表
+3. 以可配置的并发数（默认 32）批量发送 `GET http://<ip>:<port>/v1/healthz`
+4. 收到 200 响应且 JSON `app` 字段匹配目标应用 → 发现成功
+5. 全部未命中 → 等待 `scan_interval` 后重试
+
+**优势：** 无需组播支持，兼容所有网络环境（含禁用 mDNS 的企业网）。  
+**限制：** /24 子网内最多扫 254 个地址；跨子网场景需用户手动 `set_target()`。
+
+### 2.2 mDNS 服务注册（Beacon 端）
+
+Beacon 启动时向局域网注册一条 mDNS 服务记录（用于未来可能的 mDNS Scanner 实现）：
 
 | 字段 | 值 | 说明 |
 |------|-----|------|
@@ -43,7 +65,9 @@ Beacon 启动时向局域网注册一条 mDNS 服务记录：
 | Port | 实际 HTTP 监听端口 | 写入 SRV 记录 |
 | Host | 设备当前 WiFi IP | 写入 A/AAAA 记录 |
 
-### 2.2 服务浏览（Scanner 端）
+### 2.3 mDNS 服务浏览（保留参考）
+
+> 以下内容描述 mDNS 浏览方式，Godot 端当前**未使用**，仅供未来实现或第三方参考。
 
 Scanner 周期性向 `224.0.0.251:5353` 发送 mDNS PTR 查询：
 
@@ -65,7 +89,7 @@ Offset  Size  Field
 `_agentpost._tcp.local.` → `[10]_agentpost[4]_tcp[5]local[0]`  
 （每段前置 1 字节长度，末尾 0x00 终止）
 
-### 2.3 响应解析
+### 2.4 mDNS 响应解析（保留参考）
 
 Scanner 从响应中提取：
 1. **来源 IP**（UDP 包的 source address）→ 设备地址
@@ -145,12 +169,14 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 |------|-----------|------|
 | `heartbeat_interval` | 5 秒 | HTTP 轮询间隔 |
 | `max_miss_count` | 3 | 连续失败次数阈值 |
-| `mdns_query_interval` | 30 秒 | mDNS 重查间隔（应对 IP 变化） |
+| `scan_interval` | 30 秒 | 子网扫描重试间隔（设备未在场时周期性重扫） |
+| `scan_concurrency` | 32 | 子网扫描并发请求数 |
+| `scan_timeout` | 1.5 秒 | 扫描探测单次 HTTP 超时 |
 
 **状态机：**
 
 ```
-         mDNS 发现 + healthz 200
+         子网扫描命中 + healthz 200
  [未发现] ────────────────────────► [在场]
      ▲                                │
      │    连续 max_miss_count 次失败    │
@@ -167,15 +193,17 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 
 所有实现必须支持以下配置项（命名可按平台惯例调整，语义必须一致）：
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `port` | ✅ | HTTP 监听端口（Beacon）/ 期望端口（Scanner fallback） |
-| `appName` | ✅ | 写入 healthz JSON 的 `app` 字段 |
-| `appVersion` | ✅ | 写入 healthz JSON 的 `version` 字段 |
-| `serviceType` | ✅ | mDNS 服务类型，格式 `_<name>._tcp.` |
-| `serviceName` | ✅ | mDNS 实例名 |
+| 参数 | Beacon | Scanner | 说明 |
+|------|--------|---------|------|
+| `port` | ✅ | ✅ | HTTP 监听端口（Beacon）/ 探测目标端口（Scanner） |
+| `appName` | ✅ | — | 写入 healthz JSON 的 `app` 字段 |
+| `appVersion` | ✅ | — | 写入 healthz JSON 的 `version` 字段 |
+| `serviceType` | ✅ | — | mDNS 服务类型，格式 `_<name>._tcp.`（Beacon 注册用） |
+| `serviceName` | ✅ | — | mDNS 实例名（Beacon 注册用） |
 
-**所有参数均无默认值**——强制集成方显式传入，避免遗漏导致排查困难。
+> Scanner（子网扫描模式）只需 `port` 即可工作；`serviceType` 为保留字段供未来 mDNS 模式使用。
+
+**Beacon 侧所有参数均无默认值**——强制集成方显式传入，避免遗漏导致排查困难。
 
 ---
 
@@ -200,32 +228,34 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 
 | 规范条目 | Android 实现 | Godot 实现 |
 |----------|-------------|------------|
+| 设备发现 | N/A（仅 Beacon） | 子网扫描：遍历 /24 并发探测 HTTP 端点 |
 | mDNS 注册 | `NsdManager.registerService()` | N/A（仅 Scanner） |
-| mDNS 浏览 | N/A（仅 Beacon） | `PacketPeerUDP` multicast |
 | HTTP 服务 | `NanoHTTPD` | N/A（仅 Scanner） |
-| HTTP 客户端 | N/A | `HTTPRequest` node |
-| healthz JSON | `PresenceHttpServer.serve()` | `_on_heartbeat_response()` 解析 |
+| HTTP 客户端 | N/A | `HTTPRequest` node（扫描池 + 心跳各独立实例） |
+| healthz JSON | `PresenceHttpServer.serve()` | `_on_heartbeat_response()` / `_on_scan_response()` 解析 |
 | 安全过滤 | `isPrivateNetwork()` | 无需（Scanner 是发起方） |
 
 ---
 
-## 附录 A: 完整交互时序
+## 附录 A: 完整交互时序（子网扫描模式）
 
 ```
 时刻    Scanner                          Beacon (Android)
 ─────  ───────────────────────          ─────────────────────
-T+0    启动，发送 mDNS PTR 查询  ──►     (NsdManager 已注册)
-T+0.1                           ◄──     mDNS 响应（IP + Port）
-T+0.2  GET /v1/healthz          ──►
-T+0.3                           ◄──     200 {"app":"agentpost","version":"1.2.0","ts":1717200000000}
-       → emit device_found
-T+5    GET /v1/healthz          ──►     200 OK
+T+0    启动，枚举本机子网               (NsdManager 已注册 + HTTP 就绪)
+       并发探测 192.168.31.1~254
+T+0~2  GET /v1/healthz →各IP    ──►     (大部分连接超时/拒绝)
+T+1.2  GET /v1/healthz →.105    ──►
+                                ◄──     200 {"app":"agentpost","version":"1.2.0","ts":1717200000000}
+       → 停止扫描，emit device_found
+T+6    GET /v1/healthz          ──►     200 OK
        → emit heartbeat_received
-T+10   GET /v1/healthz          ──►     200 OK
+T+11   GET /v1/healthz          ──►     200 OK
 ...
 T+60   GET /v1/healthz          ──►     (手机离开 WiFi)
        → 超时
 T+65   GET /v1/healthz          ──►     超时 (miss=2)
 T+70   GET /v1/healthz          ──►     超时 (miss=3)
        → emit device_lost
+T+70   重新启动子网扫描
 ```
