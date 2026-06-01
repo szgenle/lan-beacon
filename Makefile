@@ -1,15 +1,16 @@
 # lan-beacon 顶层入口
-# Monorepo 结构下，每个平台（android/、windows/、macos/）是独立工程，
+# Monorepo 结构下，每个平台（android/、godot/）是独立子工程，
 # 顶层 Makefile 只负责跳转到对应目录调用子工具链。
 # 命名约定：<平台>-<动作>，避免未来多平台名字冲突。
 # 使用方式：make <target>
 
 .PHONY: help \
-        android-assemble android-test android-lint android-check android-clean android-publish-local
+        android-assemble android-test android-lint android-check android-clean android-publish-local \
+        godot-install
 
 help:
 	@echo "可用命令："
-	@echo "  Android 端："
+	@echo "  Android 端（beacon 广播库）："
 	@echo "    make android-assemble       编译 debug + release AAR"
 	@echo "    make android-test           运行单元测试"
 	@echo "    make android-lint           运行 Android Lint"
@@ -17,7 +18,10 @@ help:
 	@echo "    make android-clean          清理构建产物"
 	@echo "    make android-publish-local  发布到 mavenLocal（本地联调用）"
 	@echo ""
-	@echo "  Windows / macOS 端：待实现"
+	@echo "  Godot 桌面端（discovery 客户端）："
+	@echo "    make godot-install DEST=<path>  将插件复制到目标 Godot 项目的 addons/"
+	@echo ""
+	@echo "  示例：make godot-install DEST=~/Dev/aipet"
 
 android-assemble:
 	cd android && ./gradlew :lib:assembleDebug :lib:assembleRelease
@@ -35,4 +39,18 @@ android-clean:
 
 android-publish-local:
 	cd android && ./gradlew :lib:publishToMavenLocal
+
+# ---- Godot 桌面端 ----
+
+# DEST 必须指向目标 Godot 项目根目录（包含 project.godot 的目录）
+DEST ?=
+
+godot-install:
+ifeq ($(DEST),)
+	$(error 请指定目标项目路径，例如：make godot-install DEST=~/Dev/aipet)
+endif
+	@mkdir -p "$(DEST)/addons/lan_beacon"
+	@cp -R godot/addons/lan_beacon/* "$(DEST)/addons/lan_beacon/"
+	@echo "✅ 已将 lan_beacon 插件复制到 $(DEST)/addons/lan_beacon/"
+	@echo "→ 在 Godot 编辑器 Project > Project Settings > Plugins 中启用 'LanBeacon Discovery'"
 
