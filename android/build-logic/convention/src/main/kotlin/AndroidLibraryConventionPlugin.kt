@@ -44,7 +44,14 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
                         register<MavenPublication>("release") {
                             from(components["release"])
 
-                            groupId = "com.szgenle.lanbeacon"
+                            // JitPack 构建时环境变量 JITPACK=true，此时 groupId 必须匹配
+                            // JitPack 多模块约定 (com.github.User.Repo)；
+                            // 本地 / composite build 时使用自定义 group。
+                            groupId = if (System.getenv("JITPACK") == "true") {
+                                "com.github.szgenle.lan-beacon"
+                            } else {
+                                "com.szgenle.lanbeacon"
+                            }
                             artifactId = project.name  // "lib"
                             version = findProperty("lanbeacon.version")?.toString() ?: "0.1.0-SNAPSHOT"
 

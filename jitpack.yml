@@ -1,12 +1,12 @@
 # JitPack 构建配置
 # 因为 monorepo 的 Gradle 工程根在 android/ 子目录，需要显式指定。
 # JitPack 会用这里的 install 命令替代默认的 ./gradlew install。
+#
+# 依赖坐标：com.github.szgenle.lan-beacon:lib:TAG
+# 使用示例：implementation("com.github.szgenle.lan-beacon:lib:v0.1.0")
 
 jdk:
-  - openjdk17
-
-before_install:
-  - sdk install java 17.0.2-open || true
+  - 17
 
 install:
-  - cd android && ./gradlew :lib:publishToMavenLocal
+  - cd android && ./gradlew :lib:publishToMavenLocal -xtest
