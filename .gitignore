@@ -1,70 +1,50 @@
-# ---------- Gradle ----------
-.gradle/
-**/.gradle/
-build/
-**/build/
-!src/**/build/
-gradle-app.setting
-!gradle-wrapper.jar
-!gradle-wrapper.properties
-.gradletasknamecache
+# macOS
+.DS_Store
 
-# ---------- Android ----------
+# Gradle
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local SDK / IDE config
 local.properties
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# Android
 *.apk
 *.aab
 *.ap_
 *.dex
 *.class
-bin/
-gen/
-out/
-release/
-captures/
-proguard/
+
+# Logs
 *.log
-
-# Keystore / signing
-*.jks
-*.keystore
-keystore.properties
-signing.properties
-
-# ---------- Kotlin / Java ----------
 *.hprof
-*.iml
 
-# ---------- IntelliJ IDEA / Android Studio ----------
-.idea/
-*.ipr
-*.iws
-
-# ---------- VS Code ----------
-.vscode/
-*.code-workspace
-
-# ---------- Qoder ----------
-.qoder/
-
-# ---------- macOS ----------
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# ---------- Windows ----------
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# ---------- Linux ----------
-*~
-.fuse_hidden*
-.Trash-*
-
-# ---------- Misc ----------
+# Tmp
 *.swp
 *.swo
 *.bak
 *.tmp
 
-local/
+# Keystore / secrets
+*.jks
+*.keystore
+keystore.properties
+
+# Qoder
+.qoder/
+
+# Local-only scratch dir
+/local/

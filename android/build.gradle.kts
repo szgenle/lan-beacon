@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.agentpost.android.library)
+    alias(libs.plugins.lanbeacon.android.library)
 }
 
 android {

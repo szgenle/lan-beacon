@@ -1,0 +1,41 @@
+[versions]
+# Core tooling
+agp = "8.12.0"
+kotlin = "2.1.20"
+
+# Android SDK
+compileSdk = "36"
+minSdk = "24"
+targetSdk = "36"
+
+# Coroutines
+coroutines = "1.9.0"
+
+# NanoHTTPD：极轻量嵌入式 HTTP 服务
+nanohttpd = "2.3.1"
+
+# Tests
+junit = "4.13.2"
+androidx-junit = "1.2.1"
+
+[libraries]
+# Coroutines
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+
+# NanoHTTPD
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+
+# Tests
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-junit" }
+
+# Convention plugin classpath
+android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+
+# 本项目的 convention 插件
+lanbeacon-android-library = { id = "lanbeacon.android.library" }
