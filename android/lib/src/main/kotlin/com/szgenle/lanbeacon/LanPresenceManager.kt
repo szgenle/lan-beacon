@@ -8,6 +8,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +36,7 @@ class LanPresenceManager(private val context: Context) {
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     private val _state = MutableStateFlow<BeaconState>(BeaconState.Idle)
     /**
@@ -88,10 +91,13 @@ class LanPresenceManager(private val context: Context) {
         // 3. 注册 mDNS
         registerMdns()
 
-        // 4. 注册网络变化回调
+        // 4. 获取 WiFi Lock（防止息屏后 WiFi 断开）
+        acquireWifiLock()
+
+        // 5. 注册网络变化回调
         registerNetworkCallback()
 
-        // 5. 设置最终状态
+        // 6. 设置最终状态
         if (ip != null) {
             _state.value = BeaconState.Running(lanIp = ip, port = config.port)
         } else {
@@ -115,6 +121,9 @@ class LanPresenceManager(private val context: Context) {
         // 3. 停止 HTTP server
         runCatching { server?.stop() }
         server = null
+
+        // 4. 释放 WiFi Lock
+        releaseWifiLock()
 
         _state.value = BeaconState.Idle
     }
@@ -236,6 +245,48 @@ class LanPresenceManager(private val context: Context) {
             Log.e(TAG, "Failed to rebind HTTP server", e)
         }
         registerMdns()
+    }
+
+    /**
+     * 获取 WiFi Lock，防止设备息屏后 WiFi 进入低功耗模式导致 beacon 失联。
+     *
+     * - API 29+：使用 WIFI_MODE_FULL_LOW_LATENCY（最佳延迟）
+     * - API 28-：使用 WIFI_MODE_FULL_HIGH_PERF（保持高性能）
+     */
+    private fun acquireWifiLock() {
+        try {
+            val wifiManager = context.applicationContext
+                .getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+
+            @Suppress("DEPRECATION")
+            val lockType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+
+            wifiLock = wifiManager.createWifiLock(lockType, "LanBeacon::WifiLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Log.i(TAG, "WiFi lock acquired (mode=${
+                if (lockType == WifiManager.WIFI_MODE_FULL_LOW_LATENCY) "LOW_LATENCY" else "HIGH_PERF"
+            })")
+        } catch (e: Exception) {
+            // 非致命：获取失败时 beacon 仍然工作，只是息屏后可能断连
+            Log.w(TAG, "Failed to acquire WiFi lock (non-fatal)", e)
+        }
+    }
+
+    /** 释放 WiFi Lock。安全调用——未持有时不会抛异常。 */
+    private fun releaseWifiLock() {
+        wifiLock?.let { lock ->
+            if (lock.isHeld) {
+                lock.release()
+                Log.i(TAG, "WiFi lock released")
+            }
+        }
+        wifiLock = null
     }
 
     companion object {
