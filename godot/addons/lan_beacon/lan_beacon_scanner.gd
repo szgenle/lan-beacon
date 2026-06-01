@@ -71,6 +71,7 @@ var _is_device_present: bool = false
 var _scanning: bool = false
 var _scan_queue: Array[String] = []  # 待扫描 IP 列表
 var _scan_pool: Array[HTTPRequest] = []  # 并发 HTTP 请求池
+var _scan_busy: Array[bool] = []  # 与 _scan_pool 等长，标记每个槽是否在飞行中
 var _active_scans: int = 0
 
 
@@ -142,38 +143,58 @@ func _start_scan() -> void:
 		push_warning("LanBeaconScanner: No private subnets found")
 		return
 
+	# 取消上一轮可能仍在飞行的请求，防止本轮派发时遇到 ERR_BUSY 死循环。
+	_cancel_inflight_scans()
+
 	_scan_queue.clear()
 	for prefix in subnets:
 		for i in range(1, 255):
 			_scan_queue.append(prefix + str(i))
 
 	_scanning = true
-	_active_scans = 0
 	# 启动并发扫描
 	_dispatch_scans()
 
 
+func _cancel_inflight_scans() -> void:
+	## 取消所有仍标记为 busy 的扫描请求，恢复槽位空闲。
+	for i in range(_scan_pool.size()):
+		if _scan_busy[i]:
+			_scan_pool[i].cancel_request()
+			_scan_busy[i] = false
+	_active_scans = 0
+
+
 func _dispatch_scans() -> void:
-	## 从队列中取出 IP 分配给空闲的 HTTPRequest
-	while _active_scans < _scan_pool.size() and not _scan_queue.is_empty():
-		if not _scanning:
+	## 遍历空闲槽位派发请求；不再使用 _active_scans 作为下标，避免与槽位错位。
+	if not _scanning:
+		return
+	for i in range(_scan_pool.size()):
+		if _scan_queue.is_empty():
 			break
+		if _scan_busy[i]:
+			continue
 		var ip := _scan_queue.pop_front()
-		var http := _scan_pool[_active_scans]
-		_active_scans += 1
+		var http := _scan_pool[i]
 		var url := "http://%s:%d/v1/healthz" % [ip, target_port]
 		http.set_meta("scan_ip", ip)
 		var err := http.request(url)
 		if err != OK:
-			# 请求发不出去，跳过
-			_active_scans -= 1
-			_dispatch_scans()
-			return
+			# 请求发不出去，槽位保持 idle，跳过该 IP，继续轮询其它槽。
+			continue
+		_scan_busy[i] = true
+		_active_scans += 1
 
 
-func _on_scan_response(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, http: HTTPRequest) -> void:
-	_active_scans -= 1
+func _on_scan_response(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, http: HTTPRequest, slot: int) -> void:
+	# 入口立即把槽标记为 idle，后续如复用再重新置 busy。
+	_scan_busy[slot] = false
+	_active_scans = max(0, _active_scans - 1)
 	var ip: String = http.get_meta("scan_ip", "")
+
+	# 已停止扫描（例如已发现设备 / 已被取消）则只回收槽位。
+	if not _scanning:
+		return
 
 	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
 		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -195,20 +216,23 @@ func _on_scan_response(result: int, response_code: int, _headers: PackedStringAr
 			heartbeat_received.emit(info)
 			return
 
-	# 未命中，继续调度
-	if _scanning:
-		if not _scan_queue.is_empty():
-			# 复用这个 http 节点发下一个
-			var next_ip := _scan_queue.pop_front()
-			var url := "http://%s:%d/v1/healthz" % [next_ip, target_port]
-			http.set_meta("scan_ip", next_ip)
+	# 未命中，继续调度：优先复用本槽以维持并发度。
+	if not _scan_queue.is_empty():
+		var next_ip := _scan_queue.pop_front()
+		var url := "http://%s:%d/v1/healthz" % [next_ip, target_port]
+		http.set_meta("scan_ip", next_ip)
+		var err := http.request(url)
+		if err == OK:
+			_scan_busy[slot] = true
 			_active_scans += 1
-			var err := http.request(url)
-			if err != OK:
-				_active_scans -= 1
-		elif _active_scans <= 0:
-			# 队列空且无活跃请求 → 扫描结束
-			_scanning = false
+			return
+		# 该槽请求失败，让其它空闲槽兜底
+		_dispatch_scans()
+		return
+
+	# 队列已空，所有槽都收尾后结束本轮扫描
+	if _active_scans <= 0:
+		_scanning = false
 
 
 # ==============================================================================
@@ -274,13 +298,16 @@ func _on_heartbeat_fail() -> void:
 # ==============================================================================
 
 func _setup_scan_pool() -> void:
+	_scan_pool.clear()
+	_scan_busy.clear()
 	for i in range(scan_concurrency):
 		var http := HTTPRequest.new()
 		http.timeout = scan_timeout
 		add_child(http)
-		# 用 bind 把 http 自身传入回调，方便复用
-		http.request_completed.connect(_on_scan_response.bind(http))
+		# 用 bind 把 http 自身和槽位下标传入回调，便于复用与状态同步
+		http.request_completed.connect(_on_scan_response.bind(http, i))
 		_scan_pool.append(http)
+		_scan_busy.append(false)
 
 
 # ==============================================================================
@@ -339,3 +366,4 @@ func scan_now() -> void:
 func _cleanup() -> void:
 	_scanning = false
 	_scan_queue.clear()
+	_cancel_inflight_scans()
