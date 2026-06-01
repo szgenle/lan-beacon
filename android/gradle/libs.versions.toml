@@ -11,6 +11,9 @@ targetSdk = "36"
 # Coroutines
 coroutines = "1.9.0"
 
+# AndroidX Core (for compat utilities)
+androidx-core = "1.16.0"
+
 # NanoHTTPD：极轻量嵌入式 HTTP 服务
 nanohttpd = "2.3.1"
 
@@ -21,6 +24,10 @@ androidx-junit = "1.2.1"
 [libraries]
 # Coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# AndroidX
+androidx-core = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core" }
 
 # NanoHTTPD
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }

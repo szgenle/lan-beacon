@@ -56,43 +56,77 @@ dependencies {
 
 ### 1. 声明权限
 
-`AndroidManifest.xml`：
+库 manifest 已声明所需权限（merge 后自动生效），集成方无需额外添加。
+
+如果你的 `targetSdk >= 34`（Android 14+），需确保 Service 注册时声明 `foregroundServiceType`：
 
 ```xml
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<service
+    android:name=".MyBeaconService"
+    android:foregroundServiceType="connectedDevice"
+    android:exported="false" />
 ```
 
-> 库本身不强制声明权限，由集成方按需声明。
+### 2. 继承 BeaconService（推荐）
 
-### 2. 在前台 Service 中持有实例
-
-为了避免被系统回收，强烈建议在前台 Service 中托管：
+最简集成方式——继承 `BeaconService`，只需实现两个方法：
 
 ```kotlin
-class MyForegroundService : Service() {
+class MyBeaconService : BeaconService() {
 
-    private var lan: LanPresenceManager? = null
+    override fun provideConfig() = BeaconConfig(
+        port = 47821,
+        appName = "myapp",
+        appVersion = BuildConfig.VERSION_NAME,
+        serviceType = "_myapp._tcp.",
+        serviceName = "myapp-beacon",
+    )
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification())
-
-        val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-        val config = BeaconConfig(
-            port = 47821,
-            appName = "myapp",
-            appVersion = versionName,
-            serviceType = "_myapp._tcp.",
-            serviceName = "myapp",
-        )
-        lan = LanPresenceManager(this).also { it.start(config) }
-        return START_STICKY
+    override fun buildNotification(state: BeaconState): Notification {
+        // 创建 NotificationChannel（Android O+）
+        val channelId = "beacon_channel"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Beacon", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+        val text = when (state) {
+            is BeaconState.Running -> "广播中 (${state.lanIp})"
+            is BeaconState.NetworkLost -> "等待网络..."
+            is BeaconState.Error -> "错误: ${state.message}"
+            else -> "启动中..."
+        }
+        return NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_beacon)
+            .setContentTitle("LAN Beacon")
+            .setContentText(text)
+            .setOngoing(true)
+            .build()
     }
+}
+```
 
-    override fun onDestroy() {
-        lan?.stop()
-        super.onDestroy()
+启停：
+
+```kotlin
+// 启动
+ContextCompat.startForegroundService(context, Intent(context, MyBeaconService::class.java))
+
+// 停止
+context.stopService(Intent(context, MyBeaconService::class.java))
+```
+
+### 3. 观察状态（可选）
+
+```kotlin
+// 在 Activity/ViewModel 中
+lifecycleScope.launch {
+    beaconManager.state.collect { state ->
+        when (state) {
+            is BeaconState.Running -> showConnected(state.lanIp)
+            is BeaconState.NetworkLost -> showDisconnected()
+            is BeaconState.Error -> showError(state.message)
+            else -> { /* Starting / Idle */ }
+        }
     }
 }
 ```
@@ -118,10 +152,30 @@ curl http://<device-ip>:47821/v1/healthz
 
 | 成员 | 说明 |
 |---|---|
-| `start(config: BeaconConfig)` | 启动 HTTP server + mDNS 注册 + 网络监听。所有参数无默认值，强制显式传入。 |
-| `stop()` | 停止全部子组件并释放资源。 |
-| `currentLanIp: StateFlow<String?>` | 当前 WiFi LAN IPv4 地址；`null` 表示未连接或未启动。 |
-| `isRunning: StateFlow<Boolean>` | 运行状态。 |
+| `start(config: BeaconConfig)` | 启动 HTTP server + mDNS 注册 + 网络监听。 |
+| `stop()` | 停止全部子组件并释放资源，状态回到 Idle。 |
+| `state: StateFlow<BeaconState>` | 实时运行状态（Idle / Starting / Running / NetworkLost / Error）。 |
+| `currentLanIp: String?` | 便捷属性：Running 时返回 LAN IP，否则 null。 |
+| `isRunning: Boolean` | 便捷属性：等价于 `state.value is Running`。 |
+
+### `BeaconState`
+
+| 状态 | 含义 |
+|---|---|
+| `Idle` | 未启动 / 已停止 |
+| `Starting` | 正在启动中 |
+| `Running(lanIp, port)` | 正常广播中 |
+| `NetworkLost` | WiFi 断开，等待恢复 |
+| `Error(message, cause)` | 错误，需集成方处理 |
+
+### `BeaconService`（抽象基类）
+
+| 成员 | 说明 |
+|---|---|
+| `provideConfig(): BeaconConfig` | 【必须实现】返回 beacon 配置 |
+| `buildNotification(state): Notification` | 【必须实现】构建前台通知 |
+| `notificationId: Int` | 【可覆盖】通知 ID，默认 47821 |
+| `onStateChanged(state)` | 【可覆盖】状态变化回调，默认更新通知 |
 
 ### HTTP 端点
 

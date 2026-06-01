@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 网络相关（HTTP server 监听 + 网络状态回调） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- 前台 Service（Android 9+ 要求显式声明） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ connectedDevice 类型前台服务 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <!--
-        库本身不强制声明权限。集成方应在 app/AndroidManifest.xml 自行声明：
-          - android.permission.INTERNET（监听 socket）
-          - android.permission.ACCESS_NETWORK_STATE（NetworkCallback）
-          - android.permission.ACCESS_WIFI_STATE（可选，部分机型读取 LAN IP 需要）
+        库不声明具体的 <service> 组件，因为集成方会继承 BeaconService 创建自己的子类。
+        集成方需在自己的 AndroidManifest 中注册：
+        <service
+            android:name=".YourBeaconService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
     -->
 </manifest>

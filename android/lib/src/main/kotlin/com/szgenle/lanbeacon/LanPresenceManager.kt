@@ -35,12 +35,24 @@ class LanPresenceManager(private val context: Context) {
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
-    private val _currentLanIp = MutableStateFlow<String?>(null)
-    /** 当前设备的 WiFi LAN IPv4 地址，null 表示未连接或无法获取。 */
-    val currentLanIp: StateFlow<String?> = _currentLanIp.asStateFlow()
+    private val _state = MutableStateFlow<BeaconState>(BeaconState.Idle)
+    /**
+     * 当前运行状态，集成方观察此 Flow 即可得知 beacon 的实时情况。
+     *
+     * @see BeaconState
+     */
+    val state: StateFlow<BeaconState> = _state.asStateFlow()
 
-    private val _isRunning = MutableStateFlow(false)
-    val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
+    /**
+     * 当前设备的 WiFi LAN IPv4 地址，null 表示未连接或无法获取。
+     * 这是 [state] 的便捷投影：`Running` 状态时有值，其他状态为 null。
+     */
+    val currentLanIp: String?
+        get() = (_state.value as? BeaconState.Running)?.lanIp
+
+    /** 是否正在运行（便捷属性，等价于 `state.value is Running`）。 */
+    val isRunning: Boolean
+        get() = _state.value is BeaconState.Running
 
     /**
      * 启动 HTTP 服务 + mDNS 注册 + 网络监听。
@@ -49,16 +61,19 @@ class LanPresenceManager(private val context: Context) {
      * @see BeaconConfig
      */
     fun start(config: BeaconConfig) {
-        if (_isRunning.value) {
-            Log.w(TAG, "already running, skip start")
+        if (_state.value !is BeaconState.Idle) {
+            Log.w(TAG, "not idle (current=${_state.value}), skip start")
             return
         }
         this.config = config
+        _state.value = BeaconState.Starting
         Log.i(TAG, "starting LAN presence on port=${config.port}")
 
         // 1. 获取当前 LAN IP
         val ip = detectLanIp()
-        _currentLanIp.value = ip
+        if (ip == null) {
+            Log.w(TAG, "no LAN IP detected, will wait for network callback")
+        }
 
         // 2. 启动 HTTP server
         try {
@@ -66,6 +81,7 @@ class LanPresenceManager(private val context: Context) {
             Log.i(TAG, "HTTP server started on port=${config.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start HTTP server", e)
+            _state.value = BeaconState.Error("HTTP server start failed: ${e.message}", e)
             return
         }
 
@@ -75,13 +91,17 @@ class LanPresenceManager(private val context: Context) {
         // 4. 注册网络变化回调
         registerNetworkCallback()
 
-        _isRunning.value = true
+        // 5. 设置最终状态
+        if (ip != null) {
+            _state.value = BeaconState.Running(lanIp = ip, port = config.port)
+        } else {
+            _state.value = BeaconState.NetworkLost
+        }
     }
 
-    /** 停止所有子组件，释放资源。 */
+    /** 停止所有子组件，释放资源。可在任何状态下调用。 */
     fun stop() {
         Log.i(TAG, "stopping LAN presence")
-        _isRunning.value = false
 
         // 1. 注销网络回调
         networkCallback?.let { cb ->
@@ -96,7 +116,7 @@ class LanPresenceManager(private val context: Context) {
         runCatching { server?.stop() }
         server = null
 
-        _currentLanIp.value = null
+        _state.value = BeaconState.Idle
     }
 
     // ==================== 内部实现 ====================
@@ -171,18 +191,25 @@ class LanPresenceManager(private val context: Context) {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
                 val newIp = extractIpv4(linkProperties)
-                val oldIp = _currentLanIp.value
-                if (newIp != oldIp) {
+                val currentState = _state.value
+                val oldIp = (currentState as? BeaconState.Running)?.lanIp
+                if (newIp != null && newIp != oldIp) {
                     Log.i(TAG, "WiFi IP changed: $oldIp -> $newIp, rebinding")
-                    _currentLanIp.value = newIp
                     rebindServer()
+                    _state.value = BeaconState.Running(lanIp = newIp, port = config!!.port)
+                } else if (newIp != null && currentState is BeaconState.NetworkLost) {
+                    // 从 NetworkLost 恢复
+                    Log.i(TAG, "WiFi recovered: ip=$newIp")
+                    rebindServer()
+                    _state.value = BeaconState.Running(lanIp = newIp, port = config!!.port)
                 }
             }
 
             override fun onLost(network: Network) {
                 Log.i(TAG, "WiFi network lost")
-                _currentLanIp.value = null
-                // server 保持运行：WiFi 恢复后 IP 更新会触发 rebind
+                _state.value = BeaconState.NetworkLost
+                unregisterMdns()
+                // server 保持运行（绑定 0.0.0.0）：WiFi 恢复后会自动触发 onLinkPropertiesChanged
             }
         }
         networkCallback = callback
