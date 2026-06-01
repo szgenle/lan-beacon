@@ -8,9 +8,16 @@
 [![Min SDK](https://img.shields.io/badge/minSdk-24-blue.svg)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
+## Motivation
+
+I have a desktop app at work with a "Butler" feature that remotely controls an AI agent at home. For security, it should only be usable when I'm physically present at my desk. lan-beacon solves this: my phone broadcasts a heartbeat over WiFi, and the desktop app unlocks the Butler only when it detects my phone on the same office LAN — a lightweight "proof of presence" without passwords or biometrics.
+
+## What is lan-beacon
+
 lan-beacon is a lightweight LAN presence broadcasting library for Android. It embeds a tiny HTTP server (single `/v1/healthz` endpoint) + mDNS service registration in your app, enabling desktops and other devices on the same network to detect device presence with zero configuration.
 
 **Use cases:**
+- Presence-gated desktop features (unlock only when your phone is on the same LAN)
 - Desktop companion apps detecting if your phone is "nearby"
 - Smart home / automation device state awareness
 - Any scenario requiring lightweight LAN heartbeats
