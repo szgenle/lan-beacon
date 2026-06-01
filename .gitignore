@@ -1,0 +1,70 @@
+# ---------- Gradle ----------
+.gradle/
+**/.gradle/
+build/
+**/build/
+!src/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.gradletasknamecache
+
+# ---------- Android ----------
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+captures/
+proguard/
+*.log
+
+# Keystore / signing
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ---------- Kotlin / Java ----------
+*.hprof
+*.iml
+
+# ---------- IntelliJ IDEA / Android Studio ----------
+.idea/
+*.ipr
+*.iws
+
+# ---------- VS Code ----------
+.vscode/
+*.code-workspace
+
+# ---------- Qoder ----------
+.qoder/
+
+# ---------- macOS ----------
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ---------- Windows ----------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- Linux ----------
+*~
+.fuse_hidden*
+.Trash-*
+
+# ---------- Misc ----------
+*.swp
+*.swo
+*.bak
+*.tmp
+
+local/

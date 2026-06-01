@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        库本身不强制声明权限。集成方应在 app/AndroidManifest.xml 自行声明：
+          - android.permission.INTERNET（监听 socket）
+          - android.permission.ACCESS_NETWORK_STATE（NetworkCallback）
+          - android.permission.ACCESS_WIFI_STATE（可选，部分机型读取 LAN IP 需要）
+    -->
+</manifest>
