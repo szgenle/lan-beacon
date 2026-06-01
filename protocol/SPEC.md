@@ -48,7 +48,7 @@ Scanner 遍历本机所有 RFC 1918 私有 IPv4 地址所属的 /24 子网，对
 1. 枚举本机网络接口，筛选 IPv4 私有地址（10.x / 172.16-31.x / 192.168.x）
 2. 对每个地址取 /24 前缀，生成 1–254 的候选 IP 列表
 3. 以可配置的并发数（默认 32）批量发送 `GET http://<ip>:<port>/v1/healthz`
-4. 收到 200 响应且 JSON `app` 字段匹配目标应用 → 发现成功
+4. 收到 200 响应且 JSON `app` 字段匹配目标应用（或未配置过滤）→ 发现成功
 5. 全部未命中 → 等待 `scan_interval` 后重试
 
 **优势：** 无需组播支持，兼容所有网络环境（含禁用 mDNS 的企业网）。  
@@ -200,8 +200,10 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 | `appVersion` | ✅ | — | 写入 healthz JSON 的 `version` 字段 |
 | `serviceType` | ✅ | — | mDNS 服务类型，格式 `_<name>._tcp.`（Beacon 注册用） |
 | `serviceName` | ✅ | — | mDNS 实例名（Beacon 注册用） |
+| `targetApp` | — | 可选 | 扫描时匹配 healthz 响应的 `app` 字段；为空则接受任何合法 beacon |
 
-> Scanner（子网扫描模式）只需 `port` 即可工作；`serviceType` 为保留字段供未来 mDNS 模式使用。
+> Scanner（子网扫描模式）只需 `port` 即可工作；`targetApp` 可选但推荐设置，用于多服务环境下避免误识别。
+> `serviceType` 为保留字段供未来 mDNS 模式使用。
 
 **Beacon 侧所有参数均无默认值**——强制集成方显式传入，避免遗漏导致排查困难。
 

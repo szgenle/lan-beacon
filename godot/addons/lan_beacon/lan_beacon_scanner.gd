@@ -34,8 +34,12 @@ extends Node
 ## 扫描时单次 HTTP 请求超时（秒）。
 @export_range(0.5, 5.0, 0.5) var scan_timeout: float = 1.5
 
+## 目标应用标识。用于匹配 healthz 响应中的 app 字段。
+## 为空时接受任何有效 healthz 响应（不过滤），非空则精确匹配。
+@export var target_app: String = ""
+
 ## mDNS 服务类型（保留字段，供 plugin.cfg 描述用，不影响实际扫描逻辑）。
-@export var service_type: String = "_agentpost._tcp."
+@export var service_type: String = "_lanbeacon._tcp."
 
 # ==============================================================================
 # 信号
@@ -89,6 +93,16 @@ func _exit_tree() -> void:
 # ==============================================================================
 # 子网扫描
 # ==============================================================================
+
+func _match_app(data: Dictionary) -> bool:
+	## 判断 healthz 响应是否匹配目标应用。
+	## target_app 为空时只要有 app 字段即认为匹配；非空则精确比较。
+	var app_value := String(data.get("app", ""))
+	if app_value.is_empty():
+		return false  # 无 app 字段的响应不是合法 beacon
+	if target_app.is_empty():
+		return true  # 不过滤，接受任何带 app 字段的响应
+	return app_value == target_app
 
 func _get_local_subnets() -> Array[String]:
 	## 返回本机所有私有 IP 的 /24 子网前缀（如 "192.168.31."）
@@ -162,9 +176,8 @@ func _on_scan_response(result: int, response_code: int, _headers: PackedStringAr
 	var ip: String = http.get_meta("scan_ip", "")
 
 	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-		# 验证是否是 agentpost
 		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-		if parsed is Dictionary and String(parsed.get("app", "")) == "agentpost":
+		if parsed is Dictionary and _match_app(parsed):
 			# 找到了！
 			_scanning = false
 			_scan_queue.clear()
