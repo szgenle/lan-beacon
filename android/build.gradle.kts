@@ -1,13 +1,5 @@
+// 顶层 build 文件。具体插件通过 Convention Plugin 应用，这里只做声明。
 plugins {
-    alias(libs.plugins.lanbeacon.android.library)
-}
-
-android {
-    namespace = "com.szgenle.lanbeacon"
-}
-
-dependencies {
-    // 极轻量嵌入式 HTTP 服务（局域网在场广播 healthz 端点）
-    implementation(libs.nanohttpd)
-    implementation(libs.kotlinx.coroutines.core)
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
 }

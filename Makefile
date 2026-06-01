@@ -1,30 +1,38 @@
-# lan-beacon 开发常用命令
+# lan-beacon 顶层入口
+# Monorepo 结构下，每个平台（android/、windows/、macos/）是独立工程，
+# 顶层 Makefile 只负责跳转到对应目录调用子工具链。
+# 命名约定：<平台>-<动作>，避免未来多平台名字冲突。
 # 使用方式：make <target>
 
-.PHONY: help assemble test lint check clean publish-local
+.PHONY: help \
+        android-assemble android-test android-lint android-check android-clean android-publish-local
 
 help:
 	@echo "可用命令："
-	@echo "  make assemble       编译 debug + release AAR"
-	@echo "  make test           运行单元测试"
-	@echo "  make lint           运行 Android Lint"
-	@echo "  make check          test + lint 一起跑"
-	@echo "  make clean          清理构建产物"
-	@echo "  make publish-local  发布到 mavenLocal（本地联调用）"
+	@echo "  Android 端："
+	@echo "    make android-assemble       编译 debug + release AAR"
+	@echo "    make android-test           运行单元测试"
+	@echo "    make android-lint           运行 Android Lint"
+	@echo "    make android-check          test + lint 一起跑"
+	@echo "    make android-clean          清理构建产物"
+	@echo "    make android-publish-local  发布到 mavenLocal（本地联调用）"
+	@echo ""
+	@echo "  Windows / macOS 端：待实现"
 
-assemble:
-	./gradlew :android:assembleDebug :android:assembleRelease
+android-assemble:
+	cd android && ./gradlew :lib:assembleDebug :lib:assembleRelease
 
-test:
-	./gradlew :android:test
+android-test:
+	cd android && ./gradlew :lib:test
 
-lint:
-	./gradlew :android:lint
+android-lint:
+	cd android && ./gradlew :lib:lint
 
-check: test lint
+android-check: android-test android-lint
 
-clean:
-	./gradlew clean
+android-clean:
+	cd android && ./gradlew clean
 
-publish-local:
-	./gradlew :android:publishToMavenLocal
+android-publish-local:
+	cd android && ./gradlew :lib:publishToMavenLocal
+

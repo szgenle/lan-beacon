@@ -5,7 +5,7 @@
 .gradle/
 build/
 out/
-!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # Local SDK / IDE config
 local.properties
