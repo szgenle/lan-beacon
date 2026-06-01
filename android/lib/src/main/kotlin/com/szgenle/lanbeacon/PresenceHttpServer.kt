@@ -36,7 +36,7 @@ class PresenceHttpServer(
 
         // 路由：仅 GET /v1/healthz
         if (session.method == Method.GET && session.uri == "/v1/healthz") {
-            val json = """{"app":"$appName","version":"$appVersion","ts":${System.currentTimeMillis()}}"""
+            val json = buildHealthzJson(appName, appVersion, System.currentTimeMillis())
             return newFixedLengthResponse(
                 Response.Status.OK,
                 "application/json",
@@ -54,6 +54,24 @@ class PresenceHttpServer(
 
     companion object {
         private const val TAG = "PresenceHttpServer"
+
+        /**
+         * 构造 `/v1/healthz` 的 JSON 响应体。
+         *
+         * 仅做转义最小化处理：因为 [appName] / [appVersion] 由集成方在 [BeaconConfig] 中传入，
+         * 双引号和反斜杠会被转义，避免破坏 JSON 结构。
+         *
+         * 输出 schema：
+         * ```
+         * {"app":"<appName>","version":"<appVersion>","ts":<unixMillis>}
+         * ```
+         */
+        internal fun buildHealthzJson(appName: String, appVersion: String, ts: Long): String {
+            return """{"app":"${escape(appName)}","version":"${escape(appVersion)}","ts":$ts}"""
+        }
+
+        private fun escape(s: String): String =
+            s.replace("\\", "\\\\").replace("\"", "\\\"")
 
         /**
          * 判断 IP 是否属于 RFC1918 / link-local 私有网段：

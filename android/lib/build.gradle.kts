@@ -4,6 +4,11 @@ plugins {
 
 android {
     namespace = "com.szgenle.lanbeacon"
+
+    testOptions {
+        // 单元测试中调用 android.util.Log 等 framework API 时返回默认值，不抛 RuntimeException
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -11,4 +16,7 @@ dependencies {
     implementation(libs.nanohttpd)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Unit tests
+    testImplementation(libs.junit)
 }
