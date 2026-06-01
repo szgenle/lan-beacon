@@ -97,7 +97,11 @@ func _setup_mdns() -> void:
 		if err != OK:
 			push_warning("LanBeaconScanner: Failed to bind UDP socket: %s" % error_string(err))
 			return
-	_udp.join_multicast_group(MDNS_MULTICAST_ADDR, "")
+	# 注意：不调用 join_multicast_group。
+	# macOS 上 Godot 对接口参数校验严格（""、"*"、"0.0.0.0" 均报 ERR_INVALID_PARAMETER），
+	# 且引擎 ERR_FAIL_COND_V 会先打印红色 Error 再返回错误码，GDScript 无法静默。
+	# 我们主动向 224.0.0.251:5353 发送 PTR 查询，responder 以单播回应到源端口，
+	# 不需要 multicast group 成员资格即可接收。
 	_udp.set_broadcast_enabled(true)
 
 
