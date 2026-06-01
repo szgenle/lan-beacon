@@ -19,18 +19,17 @@ import java.net.Inet4Address
  *
  * 整合三个子组件的生命周期：
  * 1. [PresenceHttpServer]：迷你 HTTP 服务，响应 `/v1/healthz`
- * 2. mDNS 服务注册：让桌面端自动发现设备 IP（默认 `_lanbeacon._tcp.`，集成方应覆盖为自己的 `_<app>._tcp.`）
+ * 2. mDNS 服务注册：让桌面端自动发现设备 IP
  * 3. 网络变化监听（ConnectivityManager.NetworkCallback）：WiFi 切换时自动重绑
  *
  * 集成方在前台 Service 中持有本类实例，按开关切换 [start] / [stop]。
+ *
+ * @see BeaconConfig 全部配置参数（无默认值，强制显式传入）
  */
 class LanPresenceManager(private val context: Context) {
 
     private var server: PresenceHttpServer? = null
-    private var port: Int = DEFAULT_PORT
-    private var appName: String = DEFAULT_APP_NAME
-    private var serviceType: String = DEFAULT_MDNS_SERVICE_TYPE
-    private var serviceName: String = DEFAULT_MDNS_SERVICE_NAME
+    private var config: BeaconConfig? = null
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var connectivityManager: ConnectivityManager? = null
@@ -46,28 +45,16 @@ class LanPresenceManager(private val context: Context) {
     /**
      * 启动 HTTP 服务 + mDNS 注册 + 网络监听。
      *
-     * @param port 监听端口，默认 47821
-     * @param appName 应用标识，写入 healthz JSON 的 `app` 字段
-     * @param appVersion 应用版本号，写入 healthz JSON 的 `version` 字段
-     * @param serviceType mDNS 服务类型，需以下划线开头（如 `_lanbeacon._tcp.`、`_myapp._tcp.`）
-     * @param serviceName mDNS 服务实例名（用户可见）
+     * @param config 全部配置参数，无默认值，集成方必须显式构造。
+     * @see BeaconConfig
      */
-    fun start(
-        port: Int = DEFAULT_PORT,
-        appName: String = DEFAULT_APP_NAME,
-        appVersion: String,
-        serviceType: String = DEFAULT_MDNS_SERVICE_TYPE,
-        serviceName: String = DEFAULT_MDNS_SERVICE_NAME,
-    ) {
+    fun start(config: BeaconConfig) {
         if (_isRunning.value) {
             Log.w(TAG, "already running, skip start")
             return
         }
-        this.port = port
-        this.appName = appName
-        this.serviceType = serviceType
-        this.serviceName = serviceName
-        Log.i(TAG, "starting LAN presence on port=$port")
+        this.config = config
+        Log.i(TAG, "starting LAN presence on port=${config.port}")
 
         // 1. 获取当前 LAN IP
         val ip = detectLanIp()
@@ -75,18 +62,18 @@ class LanPresenceManager(private val context: Context) {
 
         // 2. 启动 HTTP server
         try {
-            server = PresenceHttpServer(port, appName, appVersion).also { it.start() }
-            Log.i(TAG, "HTTP server started on port=$port")
+            server = PresenceHttpServer(config.port, config.appName, config.appVersion).also { it.start() }
+            Log.i(TAG, "HTTP server started on port=${config.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start HTTP server", e)
             return
         }
 
         // 3. 注册 mDNS
-        registerMdns(port)
+        registerMdns()
 
         // 4. 注册网络变化回调
-        registerNetworkCallback(appName, appVersion)
+        registerNetworkCallback()
 
         _isRunning.value = true
     }
@@ -130,12 +117,13 @@ class LanPresenceManager(private val context: Context) {
             ?.hostAddress
     }
 
-    private fun registerMdns(port: Int) {
+    private fun registerMdns() {
+        val cfg = config ?: return
         try {
             val serviceInfo = NsdServiceInfo().apply {
-                serviceName = this@LanPresenceManager.serviceName
-                serviceType = this@LanPresenceManager.serviceType
-                setPort(port)
+                serviceName = cfg.serviceName
+                serviceType = cfg.serviceType
+                setPort(cfg.port)
             }
             nsdManager = (context.getSystemService(Context.NSD_SERVICE) as? NsdManager)?.also { nsd ->
                 val listener = object : NsdManager.RegistrationListener {
@@ -171,7 +159,7 @@ class LanPresenceManager(private val context: Context) {
         nsdManager = null
     }
 
-    private fun registerNetworkCallback(appName: String, appVersion: String) {
+    private fun registerNetworkCallback() {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return
         connectivityManager = cm
@@ -187,7 +175,7 @@ class LanPresenceManager(private val context: Context) {
                 if (newIp != oldIp) {
                     Log.i(TAG, "WiFi IP changed: $oldIp -> $newIp, rebinding")
                     _currentLanIp.value = newIp
-                    rebindServer(appName, appVersion)
+                    rebindServer()
                 }
             }
 
@@ -206,7 +194,8 @@ class LanPresenceManager(private val context: Context) {
      * NanoHTTPD 绑定的是 0.0.0.0（handler 层做来源过滤），所以其实只需要重注册 mDNS 即可。
      * 但为安全起见，完整重启一遍。
      */
-    private fun rebindServer(appName: String, appVersion: String) {
+    private fun rebindServer() {
+        val cfg = config ?: return
         // 停旧
         runCatching { server?.stop() }
         server = null
@@ -214,27 +203,15 @@ class LanPresenceManager(private val context: Context) {
 
         // 起新
         try {
-            server = PresenceHttpServer(port, appName, appVersion).also { it.start() }
-            Log.i(TAG, "HTTP server rebound on port=$port")
+            server = PresenceHttpServer(cfg.port, cfg.appName, cfg.appVersion).also { it.start() }
+            Log.i(TAG, "HTTP server rebound on port=${cfg.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to rebind HTTP server", e)
         }
-        registerMdns(port)
+        registerMdns()
     }
 
     companion object {
         private const val TAG = "LanPresenceManager"
-
-        /** 默认监听端口。 */
-        const val DEFAULT_PORT = 47821
-
-        /** 默认应用标识，写入 healthz JSON 的 `app` 字段。集成方应传入自己的 app 名。 */
-        const val DEFAULT_APP_NAME = "lanbeacon"
-
-        /** 默认 mDNS 服务类型。集成方应传入自己的 `_<app>._tcp.`。 */
-        const val DEFAULT_MDNS_SERVICE_TYPE = "_lanbeacon._tcp."
-
-        /** 默认 mDNS 服务实例名。集成方应传入自己的实例名。 */
-        const val DEFAULT_MDNS_SERVICE_NAME = "lanbeacon"
     }
 }

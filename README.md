@@ -79,15 +79,14 @@ class MyForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
 
         val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-        lan = LanPresenceManager(this).also {
-            it.start(
-                port = 47821,
-                appName = "myapp",
-                appVersion = versionName,
-                serviceType = "_myapp._tcp.",
-                serviceName = "myapp",
-            )
-        }
+        val config = BeaconConfig(
+            port = 47821,
+            appName = "myapp",
+            appVersion = versionName,
+            serviceType = "_myapp._tcp.",
+            serviceName = "myapp",
+        )
+        lan = LanPresenceManager(this).also { it.start(config) }
         return START_STICKY
     }
 
@@ -119,7 +118,7 @@ curl http://<device-ip>:47821/v1/healthz
 
 | 成员 | 说明 |
 |---|---|
-| `start(port, appName, appVersion, serviceType, serviceName)` | 启动 HTTP server + mDNS 注册 + 网络监听。除 `appVersion` 外其它参数均有默认值。 |
+| `start(config: BeaconConfig)` | 启动 HTTP server + mDNS 注册 + 网络监听。所有参数无默认值，强制显式传入。 |
 | `stop()` | 停止全部子组件并释放资源。 |
 | `currentLanIp: StateFlow<String?>` | 当前 WiFi LAN IPv4 地址；`null` 表示未连接或未启动。 |
 | `isRunning: StateFlow<Boolean>` | 运行状态。 |
@@ -135,7 +134,7 @@ curl http://<device-ip>:47821/v1/healthz
 ### mDNS
 
 - 协议：DNS-SD over mDNS（Android `NsdManager`）
-- 默认服务类型：`_lanbeacon._tcp.`，强烈建议在 `start()` 中覆盖为你自己的 `_<app>._tcp.`
+- 服务类型：由 `BeaconConfig.serviceType` 指定（如 `_myapp._tcp.`），无默认值
 - TXT 记录：暂未携带（v0.1）
 
 ---
