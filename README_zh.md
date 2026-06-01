@@ -4,7 +4,7 @@
 
 > 让桌面端在局域网里"看见"你的 Android 设备 / Tiny LAN presence beacon for Android.
 
-[![JitPack](https://img.shields.io/jitpack/version/szgenle/lan-beacon?label=JitPack)](https://jitpack.io/#szgenle/lan-beacon)
+[![JitPack](https://jitpack.io/v/szgenle/lan-beacon.svg)](https://jitpack.io/#szgenle/lan-beacon)
 [![Min SDK](https://img.shields.io/badge/minSdk-24-blue.svg)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
