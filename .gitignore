@@ -48,3 +48,5 @@ keystore.properties
 
 # Local-only scratch dir
 /local/
+
+android/build-logic/convention/bin/
