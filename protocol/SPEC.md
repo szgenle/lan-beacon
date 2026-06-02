@@ -147,7 +147,8 @@ Content-Type: application/json
 ### 3.4 Error Responses
 
 | HTTP Status | Meaning |
-|-------------|---------|
+|-------------|--------|
+| 401 Unauthorized | Token configured but request missing or mismatched `Authorization` header |
 | 403 Forbidden | Request source is not a private network |
 | 404 Not Found | Path is not `/v1/healthz` |
 
@@ -162,6 +163,24 @@ Beacon **must** implement source IP validation, allowing only:
 | Private Class C | 192.168.0.0/16 |
 | Link-local | 169.254.0.0/16 |
 | Loopback | 127.0.0.0/8 |
+
+### 3.6 Token Authentication (Optional)
+
+Beacon **may** be configured with a shared secret token. When set, Scanner must include the token in every request:
+
+```
+Authorization: Bearer <token>
+```
+
+**Validation rules:**
+
+1. If Beacon has no token configured → skip validation (backward compatible with v0.1)
+2. If Beacon has token configured:
+   - Request has matching `Authorization: Bearer <token>` header → proceed normally
+   - Request has missing or mismatched header → return `401 Unauthorized`
+3. Token comparison must use constant-time algorithm (timing-safe) to prevent side-channel attacks
+
+**Filter order:** source IP check (403) → token check (401) → route match (404/200)
 
 ---
 
@@ -203,6 +222,7 @@ All implementations must support these parameters (naming may follow platform co
 | `appVersion` | Yes | — | Written to healthz JSON `version` field |
 | `serviceType` | Yes | — | mDNS service type, format `_<name>._tcp.` (Beacon registration) |
 | `serviceName` | Yes | — | mDNS instance name (Beacon registration) |
+| `token` | Optional | Optional | Shared secret for Bearer token auth; null/empty = disabled (see §3.6) |
 
 > Scanner (subnet scan mode) only needs `port` to function; `serviceType` is reserved for future mDNS mode.
 

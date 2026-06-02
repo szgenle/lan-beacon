@@ -54,4 +54,14 @@ data class BeaconConfig(
      * 同一局域网内同一 serviceType 下需唯一；Android NSD 会自动在冲突时追加编号。
      */
     val serviceName: String,
+
+    /**
+     * 可选的 Bearer Token 共享密钥。
+     *
+     * 非 null 时启用鉴权：Beacon 端要求 Scanner 请求携带 `Authorization: Bearer <token>` 头，
+     * 缺少或不匹配时返回 401。
+     *
+     * 为 null（默认）时跳过验证，行为与 v0.1 一致。
+     */
+    val token: String? = null,
 )

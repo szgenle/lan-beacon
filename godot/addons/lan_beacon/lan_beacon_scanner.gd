@@ -41,6 +41,10 @@ extends Node
 ## mDNS 服务类型（保留字段，供 plugin.cfg 描述用，不影响实际扫描逻辑）。
 @export var service_type: String = "_lanbeacon._tcp."
 
+## Bearer Token 共享密钥。非空时在所有 HTTP 请求中添加 Authorization 头。
+## 为空时不发送鉴权头（向后兼容 v0.1）。
+@export var auth_token: String = ""
+
 # ==============================================================================
 # 信号
 # ==============================================================================
@@ -73,6 +77,13 @@ var _scan_queue: Array[String] = []  # 待扫描 IP 列表
 var _scan_pool: Array[HTTPRequest] = []  # 并发 HTTP 请求池
 var _scan_busy: Array[bool] = []  # 与 _scan_pool 等长，标记每个槽是否在飞行中
 var _active_scans: int = 0
+
+
+## 构建 HTTP 自定义头（token 非空时添加 Authorization 头）。
+func _get_auth_headers() -> PackedStringArray:
+	if auth_token.is_empty():
+		return PackedStringArray()
+	return PackedStringArray(["Authorization: Bearer " + auth_token])
 
 
 # ==============================================================================
@@ -178,7 +189,7 @@ func _dispatch_scans() -> void:
 		var http := _scan_pool[i]
 		var url := "http://%s:%d/v1/healthz" % [ip, target_port]
 		http.set_meta("scan_ip", ip)
-		var err := http.request(url)
+		var err := http.request(url, _get_auth_headers())
 		if err != OK:
 			# 请求发不出去，槽位保持 idle，跳过该 IP，继续轮询其它槽。
 			continue
@@ -221,7 +232,7 @@ func _on_scan_response(result: int, response_code: int, _headers: PackedStringAr
 		var next_ip := _scan_queue.pop_front()
 		var url := "http://%s:%d/v1/healthz" % [next_ip, target_port]
 		http.set_meta("scan_ip", next_ip)
-		var err := http.request(url)
+		var err := http.request(url, _get_auth_headers())
 		if err == OK:
 			_scan_busy[slot] = true
 			_active_scans += 1
@@ -250,7 +261,7 @@ func _do_heartbeat() -> void:
 	if _current_device.is_empty():
 		return
 	var url := "http://%s:%d/v1/healthz" % [_current_device["ip"], _current_device["port"]]
-	var err := _heartbeat_http.request(url)
+	var err := _heartbeat_http.request(url, _get_auth_headers())
 	if err != OK:
 		_on_heartbeat_fail()
 

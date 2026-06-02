@@ -3,6 +3,7 @@ package com.szgenle.lanbeacon
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import java.net.InetAddress
+import java.security.MessageDigest
 
 /**
  * 局域网在场广播 HTTP 服务。
@@ -15,11 +16,13 @@ import java.net.InetAddress
  * @param port HTTP 监听端口
  * @param appName healthz JSON 中的 `app` 字段值（应用标识）
  * @param appVersion healthz JSON 中的 `version` 字段值
+ * @param token 可选的 Bearer Token，非 null 时启用鉴权
  */
 class PresenceHttpServer(
     port: Int,
     private val appName: String,
     private val appVersion: String,
+    private val token: String? = null,
 ) : NanoHTTPD(port) {
 
     override fun serve(session: IHTTPSession): Response {
@@ -32,6 +35,20 @@ class PresenceHttpServer(
                 MIME_PLAINTEXT,
                 "Forbidden",
             )
+        }
+
+        // Token 鉴权：配置了 token 时要求请求携带匹配的 Authorization 头
+        if (token != null) {
+            val authHeader = session.headers["authorization"] // NanoHTTPD headers are lowercase
+            val expected = "Bearer $token"
+            if (!timeSafeEquals(expected, authHeader)) {
+                Log.w(TAG, "Rejected request with invalid/missing token from $remoteIp")
+                return newFixedLengthResponse(
+                    Response.Status.UNAUTHORIZED,
+                    MIME_PLAINTEXT,
+                    "Unauthorized",
+                )
+            }
         }
 
         // 路由：仅 GET /v1/healthz
@@ -89,6 +106,18 @@ class PresenceHttpServer(
             } catch (_: Exception) {
                 false
             }
+        }
+
+        /**
+         * 常量时间字符串比较，防止时序侧信道攻击。
+         *
+         * 无论字符串是否匹配、以及不匹配的位置在哪，执行时间恒定。
+         */
+        internal fun timeSafeEquals(expected: String, actual: String?): Boolean {
+            if (actual == null) return false
+            val expectedBytes = expected.toByteArray(Charsets.UTF_8)
+            val actualBytes = actual.toByteArray(Charsets.UTF_8)
+            return MessageDigest.isEqual(expectedBytes, actualBytes)
         }
     }
 }

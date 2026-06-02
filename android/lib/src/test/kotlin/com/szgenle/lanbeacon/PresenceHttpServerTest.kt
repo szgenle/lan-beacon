@@ -8,9 +8,10 @@ import org.junit.Test
 /**
  * [PresenceHttpServer] 单元测试。
  *
- * 覆盖两个纯函数：
+ * 覆盖纯函数：
  * - [PresenceHttpServer.isPrivateNetwork]：RFC1918 / link-local / loopback 判定
  * - [PresenceHttpServer.buildHealthzJson]：healthz JSON 格式 + 转义
+ * - [PresenceHttpServer.timeSafeEquals]：常量时间字符串比较
  */
 class PresenceHttpServerTest {
 
@@ -111,5 +112,32 @@ class PresenceHttpServerTest {
         assertTrue(json.contains("\"app\":\"agentpost\""))
         assertTrue(json.contains("\"version\":\"2.0.0\""))
         assertTrue(json.contains("\"ts\":1700000000000"))
+    }
+
+    // ==================== timeSafeEquals ====================
+
+    @Test
+    fun `timeSafeEquals - matching strings`() {
+        assertTrue(PresenceHttpServer.timeSafeEquals("Bearer my-secret", "Bearer my-secret"))
+    }
+
+    @Test
+    fun `timeSafeEquals - mismatched strings`() {
+        assertFalse(PresenceHttpServer.timeSafeEquals("Bearer correct", "Bearer wrong"))
+    }
+
+    @Test
+    fun `timeSafeEquals - null actual`() {
+        assertFalse(PresenceHttpServer.timeSafeEquals("Bearer token", null))
+    }
+
+    @Test
+    fun `timeSafeEquals - empty strings`() {
+        assertTrue(PresenceHttpServer.timeSafeEquals("", ""))
+    }
+
+    @Test
+    fun `timeSafeEquals - different lengths`() {
+        assertFalse(PresenceHttpServer.timeSafeEquals("short", "much longer string"))
     }
 }

@@ -148,6 +148,7 @@ Content-Type: application/json
 
 | HTTP Status | 含义 |
 |-------------|------|
+| 401 Unauthorized | 已配置 token 但请求缺少或不匹配 `Authorization` 头 |
 | 403 Forbidden | 请求来源不是私有网段 |
 | 404 Not Found | 路径不是 `/v1/healthz` |
 
@@ -162,6 +163,26 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 | 私有 C 类 | 192.168.0.0/16 |
 | 链路本地 | 169.254.0.0/16 |
 | 环回 | 127.0.0.0/8 |
+
+---
+
+### 3.6 Token 鉴权（可选）
+
+Beacon 端**可以**配置一个共享密钥 token。配置后，Scanner 端必须在每个请求中携带该 token：
+
+```
+Authorization: Bearer <token>
+```
+
+**验证规则：**
+
+1. Beacon 未配置 token → 跳过验证（与 v0.1 行为一致，向后兼容）
+2. Beacon 已配置 token：
+   - 请求携带匹配的 `Authorization: Bearer <token>` 头 → 正常处理
+   - 请求缺少或不匹配 → 返回 `401 Unauthorized`
+3. Token 比较必须使用常量时间算法（timing-safe），防止侧信道攻击
+
+**过滤顺序：** 来源 IP 校验 (403) → token 校验 (401) → 路由匹配 (404/200)
 
 ---
 
@@ -203,6 +224,7 @@ Beacon 端**必须**实现来源 IP 校验，仅允许以下网段：
 | `serviceType` | ✅ | — | mDNS 服务类型，格式 `_<name>._tcp.`（Beacon 注册用） |
 | `serviceName` | ✅ | — | mDNS 实例名（Beacon 注册用） |
 | `targetApp` | — | 可选 | 扫描时匹配 healthz 响应的 `app` 字段；为空则接受任何合法 beacon |
+| `token` | 可选 | 可选 | Bearer token 鉴权的共享密钥；null/空 = 不启用（见 §3.6） |
 
 > Scanner（子网扫描模式）只需 `port` 即可工作；`targetApp` 可选但推荐设置，用于多服务环境下避免误识别。
 > `serviceType` 为保留字段供未来 mDNS 模式使用。

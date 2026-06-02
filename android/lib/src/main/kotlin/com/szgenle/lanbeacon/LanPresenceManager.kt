@@ -80,7 +80,7 @@ class LanPresenceManager(private val context: Context) {
 
         // 2. 启动 HTTP server
         try {
-            server = PresenceHttpServer(config.port, config.appName, config.appVersion).also { it.start() }
+            server = PresenceHttpServer(config.port, config.appName, config.appVersion, config.token).also { it.start() }
             Log.i(TAG, "HTTP server started on port=${config.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start HTTP server", e)
