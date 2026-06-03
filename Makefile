@@ -6,6 +6,7 @@
 
 .PHONY: help \
         android-assemble android-test android-lint android-check android-clean android-publish-local \
+        scanner-build scanner-test scanner-clean scanner-publish-local \
         godot-install
 
 help:
@@ -17,6 +18,12 @@ help:
 	@echo "    make android-check          test + lint 一起跑"
 	@echo "    make android-clean          清理构建产物"
 	@echo "    make android-publish-local  发布到 mavenLocal（本地联调用）"
+	@echo ""
+	@echo "  Scanner 桌面端（KMP 发现库）："
+	@echo "    make scanner-build          编译 JVM JAR"
+	@echo "    make scanner-test           运行单元测试"
+	@echo "    make scanner-clean          清理构建产物"
+	@echo "    make scanner-publish-local  发布到 mavenLocal（本地联调用）"
 	@echo ""
 	@echo "  Godot 桌面端（discovery 客户端）："
 	@echo "    make godot-install DEST=<path>  将插件复制到目标 Godot 项目的 addons/"
@@ -39,6 +46,20 @@ android-clean:
 
 android-publish-local:
 	cd android && ./gradlew :lib:publishToMavenLocal
+
+# ---- Scanner 桌面端（KMP） ----
+
+scanner-build:
+	cd scanner && ./gradlew :lib:build
+
+scanner-test:
+	cd scanner && ./gradlew :lib:jvmTest
+
+scanner-clean:
+	cd scanner && ./gradlew clean
+
+scanner-publish-local:
+	cd scanner && ./gradlew :lib:publishToMavenLocal
 
 # ---- Godot 桌面端 ----
 

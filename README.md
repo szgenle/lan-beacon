@@ -265,7 +265,7 @@ A: `start()` catches the exception internally. State transitions to `Error`. Int
 - [x] 0.2: mDNS TXT records carrying metadata (device name, capabilities)
 - [x] 0.3: Pluggable routing (custom endpoints beyond healthz)
 - [x] 0.3: IPv6 support
-- [ ] 0.x: Desktop SDK (Kotlin Multiplatform / Rust)
+- [x] 0.4: Desktop KMP Scanner SDK (Kotlin Multiplatform, JVM target)
 
 ---
 
