@@ -222,6 +222,7 @@ func _on_scan_response(result: int, response_code: int, _headers: PackedStringAr
 				"app": parsed.get("app", ""),
 				"version": parsed.get("version", ""),
 				"ts": parsed.get("ts", 0),
+				"meta": parsed.get("meta", {}),
 			}
 			device_found.emit(info)
 			heartbeat_received.emit(info)
@@ -285,6 +286,7 @@ func _on_heartbeat_response(result: int, response_code: int, _headers: PackedStr
 		"app": data.get("app", ""),
 		"version": data.get("version", ""),
 		"ts": data.get("ts", 0),
+		"meta": data.get("meta", {}),
 	}
 
 	if not _is_device_present:

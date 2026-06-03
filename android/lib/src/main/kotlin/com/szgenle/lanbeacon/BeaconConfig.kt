@@ -64,4 +64,18 @@ data class BeaconConfig(
      * 为 null（默认）时跳过验证，行为与 v0.1 一致。
      */
     val token: String? = null,
+
+    /**
+     * 可选的元数据键值对。
+     *
+     * 写入 mDNS TXT 记录和 `/v1/healthz` JSON 响应的 `meta` 字段。
+     * 键名应为 ASCII 小写，建议不超过 9 字节（参考 RFC 6763 §6.4）。
+     *
+     * 常见用法：
+     * - `"name"` → 设备名称（如 "My Phone"）
+     * - `"cap"` → 能力声明（如 "sync,file"）
+     *
+     * 为空（默认）时不写入任何自定义 TXT 属性，`meta` 字段也不会出现在 JSON 响应中。
+     */
+    val metadata: Map<String, String> = emptyMap(),
 )

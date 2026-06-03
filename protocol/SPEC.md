@@ -66,6 +66,23 @@ Beacon registers an mDNS service record on startup (for potential future mDNS Sc
 | Service Name | Custom instance name | e.g. `agentpost-beacon`, system auto-appends number on conflict |
 | Port | Actual HTTP listen port | Written to SRV record |
 | Host | Device's current WiFi IP | Written to A/AAAA record |
+| TXT Records | Key-value metadata pairs | See below |
+
+**TXT Record attributes:**
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `v` | Yes | Protocol major version, fixed `"1"` for current spec |
+| *(custom)* | No | Integrator-defined metadata (e.g. `name`, `cap`). Keys: ASCII lowercase, max 9 bytes |
+
+Example TXT record set:
+```
+v=1
+name=My Phone
+cap=sync,file
+```
+
+> TXT attribute keys should follow [RFC 6763 §6.4](https://datatracker.ietf.org/doc/html/rfc6763#section-6.4) recommendations: short, lowercase ASCII.
 
 ### 2.3 mDNS Service Browsing (reserved reference)
 
@@ -134,7 +151,8 @@ Content-Type: application/json
 {
   "app": "<appName>",
   "version": "<appVersion>",
-  "ts": <unix_timestamp_ms>
+  "ts": <unix_timestamp_ms>,
+  "meta": { ... }
 }
 ```
 
@@ -143,6 +161,9 @@ Content-Type: application/json
 | `app` | string | Application identifier, used by Scanner to distinguish different app beacons |
 | `version` | string | Application version, for compatibility checks |
 | `ts` | number | Response timestamp in Unix milliseconds |
+| `meta` | object (optional) | Metadata key-value pairs; omitted when empty. Same content as mDNS TXT attributes (excluding `v`) |
+
+> The `meta` field is **optional** and backward-compatible: Scanners must ignore unknown fields (see §7). When Beacon has no metadata configured, this field is absent from the response.
 
 ### 3.4 Error Responses
 
@@ -223,6 +244,7 @@ All implementations must support these parameters (naming may follow platform co
 | `serviceType` | Yes | — | mDNS service type, format `_<name>._tcp.` (Beacon registration) |
 | `serviceName` | Yes | — | mDNS instance name (Beacon registration) |
 | `token` | Optional | Optional | Shared secret for Bearer token auth; null/empty = disabled (see §3.6) |
+| `metadata` | Optional | — | Key-value pairs written to mDNS TXT records and healthz `meta` field (see §2.2, §3.3) |
 
 > Scanner (subnet scan mode) only needs `port` to function; `serviceType` is reserved for future mDNS mode.
 

@@ -114,6 +114,31 @@ class PresenceHttpServerTest {
         assertTrue(json.contains("\"ts\":1700000000000"))
     }
 
+    // ==================== buildHealthzJson with metadata ====================
+
+    @Test
+    fun `buildHealthzJson - empty metadata omits meta field`() {
+        val json = PresenceHttpServer.buildHealthzJson("app", "1.0", 100L, emptyMap())
+        assertFalse(json.contains("meta"))
+        assertEquals("""{"app":"app","version":"1.0","ts":100}""", json)
+    }
+
+    @Test
+    fun `buildHealthzJson - metadata produces meta object`() {
+        val meta = mapOf("name" to "My Phone", "cap" to "sync")
+        val json = PresenceHttpServer.buildHealthzJson("app", "1.0", 100L, meta)
+        assertTrue(json.contains("\"meta\":"))
+        assertTrue(json.contains("\"name\":\"My Phone\""))
+        assertTrue(json.contains("\"cap\":\"sync\""))
+    }
+
+    @Test
+    fun `buildHealthzJson - metadata escapes special characters`() {
+        val meta = mapOf("desc" to "has\"quote")
+        val json = PresenceHttpServer.buildHealthzJson("app", "1.0", 1L, meta)
+        assertTrue(json.contains("\"desc\":\"has\\\"quote\""))
+    }
+
     // ==================== timeSafeEquals ====================
 
     @Test

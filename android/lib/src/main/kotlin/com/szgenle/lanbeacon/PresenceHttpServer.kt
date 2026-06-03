@@ -17,12 +17,14 @@ import java.security.MessageDigest
  * @param appName healthz JSON 中的 `app` 字段值（应用标识）
  * @param appVersion healthz JSON 中的 `version` 字段值
  * @param token 可选的 Bearer Token，非 null 时启用鉴权
+ * @param metadata 可选的元数据键值对，非空时写入 healthz JSON 的 `meta` 字段
  */
 class PresenceHttpServer(
     port: Int,
     private val appName: String,
     private val appVersion: String,
     private val token: String? = null,
+    private val metadata: Map<String, String> = emptyMap(),
 ) : NanoHTTPD(port) {
 
     override fun serve(session: IHTTPSession): Response {
@@ -53,7 +55,7 @@ class PresenceHttpServer(
 
         // 路由：仅 GET /v1/healthz
         if (session.method == Method.GET && session.uri == "/v1/healthz") {
-            val json = buildHealthzJson(appName, appVersion, System.currentTimeMillis())
+            val json = buildHealthzJson(appName, appVersion, System.currentTimeMillis(), metadata)
             return newFixedLengthResponse(
                 Response.Status.OK,
                 "application/json",
@@ -81,10 +83,23 @@ class PresenceHttpServer(
          * 输出 schema：
          * ```
          * {"app":"<appName>","version":"<appVersion>","ts":<unixMillis>}
+         * {"app":"<appName>","version":"<appVersion>","ts":<unixMillis>,"meta":{...}}
          * ```
          */
-        internal fun buildHealthzJson(appName: String, appVersion: String, ts: Long): String {
-            return """{"app":"${escape(appName)}","version":"${escape(appVersion)}","ts":$ts}"""
+        internal fun buildHealthzJson(
+            appName: String,
+            appVersion: String,
+            ts: Long,
+            metadata: Map<String, String> = emptyMap(),
+        ): String {
+            val base = """"app":"${escape(appName)}","version":"${escape(appVersion)}","ts":$ts"""
+            if (metadata.isEmpty()) {
+                return "{$base}"
+            }
+            val metaEntries = metadata.entries.joinToString(",") { (k, v) ->
+                "\"${escape(k)}\":\"${escape(v)}\""
+            }
+            return "{$base,\"meta\":{$metaEntries}}"
         }
 
         private fun escape(s: String): String =
