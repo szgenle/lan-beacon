@@ -263,7 +263,7 @@ A: `start()` catches the exception internally. State transitions to `Error`. Int
 
 - [x] 0.2: Optional token auth (for untrusted LAN scenarios)
 - [x] 0.2: mDNS TXT records carrying metadata (device name, capabilities)
-- [ ] 0.3: Pluggable routing (custom endpoints beyond healthz)
+- [x] 0.3: Pluggable routing (custom endpoints beyond healthz)
 - [ ] 0.3: IPv6 support
 - [ ] 0.x: Desktop SDK (Kotlin Multiplatform / Rust)
 

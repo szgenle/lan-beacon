@@ -80,7 +80,7 @@ class LanPresenceManager(private val context: Context) {
 
         // 2. 启动 HTTP server
         try {
-            server = PresenceHttpServer(config.port, config.appName, config.appVersion, config.token, config.metadata).also { it.start() }
+            server = PresenceHttpServer(config.port, config.appName, config.appVersion, config.token, config.metadata, config.routes).also { it.start() }
             Log.i(TAG, "HTTP server started on port=${config.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start HTTP server", e)
@@ -244,7 +244,7 @@ class LanPresenceManager(private val context: Context) {
 
         // 起新
         try {
-            server = PresenceHttpServer(cfg.port, cfg.appName, cfg.appVersion, cfg.token, cfg.metadata).also { it.start() }
+            server = PresenceHttpServer(cfg.port, cfg.appName, cfg.appVersion, cfg.token, cfg.metadata, cfg.routes).also { it.start() }
             Log.i(TAG, "HTTP server rebound on port=${cfg.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to rebind HTTP server", e)

@@ -8,8 +8,11 @@ import java.security.MessageDigest
 /**
  * 局域网在场广播 HTTP 服务。
  *
- * 极简实现：仅暴露 `GET /v1/healthz` 端点，供桌面端周期探测设备是否在同一局域网。
+ * 内置 `GET /v1/healthz` 端点，供桌面端周期探测设备是否在同一局域网。
+ * 支持可插拔路由：集成方可通过 [BeaconConfig.routes] 注册自定义端点。
  * 安全策略：拒绝非 RFC 1918 私有网段来源的请求（返回 403）。
+ *
+ * 路由匹配优先级：安全检查 → 内置 healthz → 自定义路由 → 404
  *
  * 生命周期由 [LanPresenceManager] 管理，不要直接 start/stop。
  *
@@ -18,6 +21,7 @@ import java.security.MessageDigest
  * @param appVersion healthz JSON 中的 `version` 字段值
  * @param token 可选的 Bearer Token，非 null 时启用鉴权
  * @param metadata 可选的元数据键值对，非空时写入 healthz JSON 的 `meta` 字段
+ * @param routes 自定义路由列表，自动继承安全策略
  */
 class PresenceHttpServer(
     port: Int,
@@ -25,6 +29,7 @@ class PresenceHttpServer(
     private val appVersion: String,
     private val token: String? = null,
     private val metadata: Map<String, String> = emptyMap(),
+    private val routes: List<Route> = emptyList(),
 ) : NanoHTTPD(port) {
 
     override fun serve(session: IHTTPSession): Response {
@@ -53,7 +58,7 @@ class PresenceHttpServer(
             }
         }
 
-        // 路由：仅 GET /v1/healthz
+        // 路由：内置 GET /v1/healthz（优先匹配）
         if (session.method == Method.GET && session.uri == "/v1/healthz") {
             val json = buildHealthzJson(appName, appVersion, System.currentTimeMillis(), metadata)
             return newFixedLengthResponse(
@@ -63,12 +68,59 @@ class PresenceHttpServer(
             )
         }
 
+        // 路由：自定义端点
+        val matchedRoute = routes.find { route ->
+            route.method.equals(session.method.name, ignoreCase = true) && route.path == session.uri
+        }
+        if (matchedRoute != null) {
+            return dispatchCustomRoute(matchedRoute, session)
+        }
+
         // 其他路径一律 404
         return newFixedLengthResponse(
             Response.Status.NOT_FOUND,
             MIME_PLAINTEXT,
             "Not Found",
         )
+    }
+
+    /**
+     * 将 NanoHTTPD session 转为 [RouteRequest]，调用自定义 handler，再转回 NanoHTTPD Response。
+     */
+    private fun dispatchCustomRoute(route: Route, session: IHTTPSession): Response {
+        return try {
+            // 读取请求体（POST/PUT 等）
+            val body = if (session.method != Method.GET && session.method != Method.HEAD) {
+                val bodyMap = mutableMapOf<String, String>()
+                session.parseBody(bodyMap)
+                bodyMap["postData"]
+            } else {
+                null
+            }
+
+            val request = RouteRequest(
+                uri = session.uri,
+                method = session.method.name,
+                headers = session.headers,
+                queryParams = session.parameters?.mapValues { (_, v) -> v.firstOrNull() ?: "" } ?: emptyMap(),
+                body = body,
+            )
+
+            val routeResponse = route.handler(request)
+
+            newFixedLengthResponse(
+                Response.Status.lookup(routeResponse.status) ?: Response.Status.OK,
+                routeResponse.mimeType,
+                routeResponse.body,
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Custom route error: ${route.method} ${route.path}", e)
+            newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Internal Server Error",
+            )
+        }
     }
 
     companion object {

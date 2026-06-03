@@ -78,4 +78,25 @@ data class BeaconConfig(
      * 为空（默认）时不写入任何自定义 TXT 属性，`meta` 字段也不会出现在 JSON 响应中。
      */
     val metadata: Map<String, String> = emptyMap(),
+
+    /**
+     * 可选的自定义路由列表。
+     *
+     * 集成方可注册额外的 HTTP 端点，所有自定义路由自动继承库内置的安全策略
+     * （RFC1918 IP 过滤 + Token 鉴权），无需自行处理安全逻辑。
+     *
+     * 内置端点 `/v1/healthz` 始终存在且优先匹配，自定义路由不可覆盖。
+     *
+     * 使用示例：
+     * ```kotlin
+     * val config = BeaconConfig(
+     *     // ... 其他参数
+     *     routes = listOf(
+     *         Route("GET", "/v1/ping") { RouteResponse(body = "{\"pong\":true}") },
+     *         Route("POST", "/v1/sync") { request -> doSync(); RouteResponse(body = "{\"ok\":true}") },
+     *     ),
+     * )
+     * ```
+     */
+    val routes: List<Route> = emptyList(),
 )
