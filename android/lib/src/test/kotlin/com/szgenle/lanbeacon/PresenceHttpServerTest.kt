@@ -77,6 +77,49 @@ class PresenceHttpServerTest {
         assertFalse(PresenceHttpServer.isPrivateNetwork("999.999.999.999"))
     }
 
+    // ==================== isPrivateNetwork IPv6 ====================
+
+    @Test
+    fun `IPv6 ULA fd prefix - should be private`() {
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fd12::1"))
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fd00::1"))
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fdff:abcd:1234::1"))
+    }
+
+    @Test
+    fun `IPv6 ULA fc prefix - should be private`() {
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fc00::1"))
+    }
+
+    @Test
+    fun `IPv6 link-local fe80 - should be private`() {
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fe80::1"))
+        assertTrue(PresenceHttpServer.isPrivateNetwork("fe80::abcd:1234:5678:9abc"))
+    }
+
+    @Test
+    fun `IPv6 loopback - should be private`() {
+        assertTrue(PresenceHttpServer.isPrivateNetwork("::1"))
+    }
+
+    @Test
+    fun `IPv6 global unicast - should NOT be private`() {
+        assertFalse(PresenceHttpServer.isPrivateNetwork("2001:db8::1"))
+        assertFalse(PresenceHttpServer.isPrivateNetwork("2400:cb00:2048:1::6814:155"))
+    }
+
+    @Test
+    fun `IPv4-mapped IPv6 private - should be private`() {
+        // IPv4-mapped IPv6 addresses: Java resolves these to Inet4Address
+        assertTrue(PresenceHttpServer.isPrivateNetwork("::ffff:192.168.1.1"))
+        assertTrue(PresenceHttpServer.isPrivateNetwork("::ffff:10.0.0.1"))
+    }
+
+    @Test
+    fun `IPv4-mapped IPv6 public - should NOT be private`() {
+        assertFalse(PresenceHttpServer.isPrivateNetwork("::ffff:8.8.8.8"))
+    }
+
     // ==================== buildHealthzJson ====================
 
     @Test

@@ -86,6 +86,15 @@ func _get_auth_headers() -> PackedStringArray:
 	return PackedStringArray(["Authorization: Bearer " + auth_token])
 
 
+## 构建 healthz URL，自动处理 IPv6 括号格式。
+## IPv6 地址在 URL 中必须用方括号包裹：http://[fe80::1]:47821/v1/healthz
+func _build_url(ip: String, port: int) -> String:
+	if ":" in ip:
+		# IPv6 地址需要方括号
+		return "http://[%s]:%d/v1/healthz" % [ip, port]
+	return "http://%s:%d/v1/healthz" % [ip, port]
+
+
 # ==============================================================================
 # 生命周期
 # ==============================================================================
@@ -118,10 +127,12 @@ func _match_app(data: Dictionary) -> bool:
 
 func _get_local_subnets() -> Array[String]:
 	## 返回本机所有私有 IP 的 /24 子网前缀（如 "192.168.31."）
+	## 注：子网扫描仅适用于 IPv4（/24 最多 254 个地址）。
+	## IPv6 子网无法枚举（/64 地址空间过大），请使用 set_target() 直接指定 IPv6 地址。
 	var subnets: Array[String] = []
 	var addrs := IP.get_local_addresses()
 	for addr: String in addrs:
-		# 只取 IPv4 私有地址
+		# 只取 IPv4 私有地址；IPv6 无法通过子网扫描发现
 		if ":" in addr:
 			continue  # 跳过 IPv6
 		var parts := addr.split(".")
@@ -261,7 +272,7 @@ func _setup_heartbeat() -> void:
 func _do_heartbeat() -> void:
 	if _current_device.is_empty():
 		return
-	var url := "http://%s:%d/v1/healthz" % [_current_device["ip"], _current_device["port"]]
+	var url := _build_url(_current_device["ip"], _current_device["port"])
 	var err := _heartbeat_http.request(url, _get_auth_headers())
 	if err != OK:
 		_on_heartbeat_fail()
@@ -346,7 +357,8 @@ func _setup_timers() -> void:
 # ==============================================================================
 
 ## 手动指定目标设备（跳过扫描发现阶段）。
-## 适用于用户已知手机 IP 的场景。
+## 适用于用户已知手机 IP 的场景。支持 IPv4 和 IPv6 地址。
+## IPv6 示例：set_target("fd12::abcd") 或 set_target("fe80::1")
 func set_target(ip: String, port: int = 47821) -> void:
 	_current_device = { "ip": ip, "port": port }
 	_miss_count = 0

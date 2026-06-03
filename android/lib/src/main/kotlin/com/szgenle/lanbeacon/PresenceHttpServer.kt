@@ -2,6 +2,7 @@ package com.szgenle.lanbeacon
 
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.security.MessageDigest
 
@@ -10,7 +11,7 @@ import java.security.MessageDigest
  *
  * 内置 `GET /v1/healthz` 端点，供桌面端周期探测设备是否在同一局域网。
  * 支持可插拔路由：集成方可通过 [BeaconConfig.routes] 注册自定义端点。
- * 安全策略：拒绝非 RFC 1918 私有网段来源的请求（返回 403）。
+ * 安全策略：拒绝非私有网段来源的请求（返回 403）。支持 IPv4 RFC1918 及 IPv6 ULA/link-local。
  *
  * 路由匹配优先级：安全检查 → 内置 healthz → 自定义路由 → 404
  *
@@ -30,7 +31,8 @@ class PresenceHttpServer(
     private val token: String? = null,
     private val metadata: Map<String, String> = emptyMap(),
     private val routes: List<Route> = emptyList(),
-) : NanoHTTPD(port) {
+) : NanoHTTPD("::", port) {
+    // 绑定 IPv6 wildcard（::）实现双栈监听：Android/Linux 上同时接受 IPv4 和 IPv6 连接。
 
     override fun serve(session: IHTTPSession): Response {
         // 安全过滤：仅允许 RFC1918 / link-local 来源
@@ -158,21 +160,42 @@ class PresenceHttpServer(
             s.replace("\\", "\\\\").replace("\"", "\\\"")
 
         /**
-         * 判断 IP 是否属于 RFC1918 / link-local 私有网段：
-         * - 10.0.0.0/8
-         * - 172.16.0.0/12
-         * - 192.168.0.0/16
+         * 判断 IP 是否属于私有/本地网段，同时支持 IPv4 与 IPv6：
+         *
+         * IPv4:
+         * - 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16（RFC1918）
          * - 169.254.0.0/16（link-local）
-         * - 127.0.0.0/8（loopback，方便本机调试）
+         * - 127.0.0.0/8（loopback）
+         *
+         * IPv6:
+         * - fc00::/7（Unique Local Address, ULA）
+         * - fe80::/10（link-local）
+         * - ::1（loopback）
+         *
+         * 注：Java 的 [InetAddress.isSiteLocalAddress] 对 IPv6 仅识别已废弃的 fec0::/10，
+         * 不覆盖现代 ULA (fc00::/7)，因此需要 [isUniqueLocalAddress] 额外判断。
          */
         fun isPrivateNetwork(ip: String?): Boolean {
             if (ip.isNullOrBlank()) return false
             return try {
                 val addr = InetAddress.getByName(ip)
                 addr.isSiteLocalAddress || addr.isLinkLocalAddress || addr.isLoopbackAddress
+                    || isUniqueLocalAddress(addr)
             } catch (_: Exception) {
                 false
             }
+        }
+
+        /**
+         * 判断是否为 IPv6 Unique Local Address (fc00::/7)。
+         * 实践中几乎只使用 fd00::/8 前缀（随机生成的 ULA）。
+         */
+        private fun isUniqueLocalAddress(addr: InetAddress): Boolean {
+            if (addr is Inet6Address) {
+                val firstByte = addr.address[0].toInt() and 0xFF
+                return firstByte == 0xFC || firstByte == 0xFD
+            }
+            return false
         }
 
         /**

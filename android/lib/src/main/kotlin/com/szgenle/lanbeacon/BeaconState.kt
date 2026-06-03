@@ -32,10 +32,12 @@ sealed class BeaconState {
      * 正常运行中。
      *
      * @property lanIp 当前设备的 LAN IPv4 地址
+     * @property lanIpv6 当前设备的 LAN IPv6 地址（ULA 或 link-local），无 IPv6 时为 null
      * @property port HTTP 监听端口
      */
     data class Running(
         val lanIp: String,
+        val lanIpv6: String? = null,
         val port: Int,
     ) : BeaconState()
 

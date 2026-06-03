@@ -177,6 +177,8 @@ Content-Type: application/json
 
 Beacon **must** implement source IP validation, allowing only:
 
+**IPv4:**
+
 | Network | CIDR |
 |---------|------|
 | Private Class A | 10.0.0.0/8 |
@@ -184,6 +186,14 @@ Beacon **must** implement source IP validation, allowing only:
 | Private Class C | 192.168.0.0/16 |
 | Link-local | 169.254.0.0/16 |
 | Loopback | 127.0.0.0/8 |
+
+**IPv6:**
+
+| Network | CIDR |
+|---------|------|
+| Unique Local Address (ULA) | fc00::/7 |
+| Link-local | fe80::/10 |
+| Loopback | ::1/128 |
 
 ### 3.6 Token Authentication (Optional)
 
