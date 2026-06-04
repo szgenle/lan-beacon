@@ -3,7 +3,7 @@
 # JitPack 会用这里的 install 命令替代默认的 ./gradlew install。
 #
 # 依赖坐标：com.github.szgenle.lan-beacon:lib:TAG
-# 使用示例：implementation("com.github.szgenle.lan-beacon:lib:v0.1.0")
+# 使用示例：implementation("com.github.szgenle.lan-beacon:lib:v0.2.0")
 
 jdk:
   - 17
