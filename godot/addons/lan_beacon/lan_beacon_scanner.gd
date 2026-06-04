@@ -198,11 +198,14 @@ func _dispatch_scans() -> void:
 			continue
 		var ip := _scan_queue.pop_front()
 		var http := _scan_pool[i]
+		# 复用 HTTPRequest 前先取消，避免底层 requesting 残留导致 ERR_BUSY。
+		http.cancel_request()
 		var url := "http://%s:%d/v1/healthz" % [ip, target_port]
 		http.set_meta("scan_ip", ip)
 		var err := http.request(url, _get_auth_headers())
 		if err != OK:
-			# 请求发不出去，槽位保持 idle，跳过该 IP，继续轮询其它槽。
+			# 请求发不出去：把 IP 放回队列前端，下一轮回调或派发再尝试，避免漏扫。
+			_scan_queue.push_front(ip)
 			continue
 		_scan_busy[i] = true
 		_active_scans += 1
@@ -243,14 +246,16 @@ func _on_scan_response(result: int, response_code: int, _headers: PackedStringAr
 	if not _scan_queue.is_empty():
 		var next_ip := _scan_queue.pop_front()
 		var url := "http://%s:%d/v1/healthz" % [next_ip, target_port]
+		# 复用同一 HTTPRequest 前显式取消，规避 request_completed 同帧再发的 ERR_BUSY。
+		http.cancel_request()
 		http.set_meta("scan_ip", next_ip)
 		var err := http.request(url, _get_auth_headers())
 		if err == OK:
 			_scan_busy[slot] = true
 			_active_scans += 1
 			return
-		# 该槽请求失败，让其它空闲槽兜底
-		_dispatch_scans()
+		# 本槽派发失败：把 IP 放回队列前端，等其它槽回调时再尝试派发，避免同帧递归触发 ERR_BUSY。
+		_scan_queue.push_front(next_ip)
 		return
 
 	# 队列已空，所有槽都收尾后结束本轮扫描
